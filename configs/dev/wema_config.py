@@ -49,14 +49,22 @@ wema_config = {
     # fits and predictions of the weather to using data for that period of the day
     # Particularly sky temperature is impacted by daily effects.
     'opens_during_nighttime' : True,
-    'opens_during_daytime': False,
+    # True to make the WEMA evaluate weather around the clock, rather than
+    # restricting its fits and predictions to night-time data.
+    'opens_during_daytime': True,
 
     # Which emails to send?
     'send_hourly_cloud_forecast_emails' : False,
 
     # These are just the bootup default values.
+    # Off until the OWM key has a One Call 3.0 subscription: wema.py calls
+    # pro.openweathermap.org/data/3.0/onecall, which 401s without one.
     'OWM_active': False,
-    'local_weather_active': False,
+    # On, so wx_ok reflects the Alpaca ObservingConditions readings.
+    # With every source off, wema.py reports wx_ok as "Not considered",
+    # which photonranch-status coerces to false and ptr_ui draws as
+    # "poor" -- indistinguishable from genuinely bad weather.
+    'local_weather_active': True,
     #'debug_site_mode': False,
 
     'debug_mode': False,
