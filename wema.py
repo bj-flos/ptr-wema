@@ -38,6 +38,7 @@ from wema_utility import plog
 #from requests.adapters import HTTPAdapter, Retry
 from dotenv import load_dotenv
 load_dotenv(".env")
+from ptr_endpoints import PTR_STATUS_ROOT, PTR_JOBS_ROOT, PTR_LOGS_ROOT
 from wema_config import get_enc_status_custom
 from wema_config import get_ocn_status_custom
 import csv
@@ -483,7 +484,7 @@ def terminate_restart_observer(site_path, no_restart=False):
 def send_status(obsy, status_type, status_to_send):
     """Sends a status update to AWS."""
     
-    uri_status = f"https://status.photonranch.org/status/{obsy}/status/"
+    uri_status = f"{PTR_STATUS_ROOT}/{obsy}/status/"
     # NB None of the strings can be empty. Otherwise this POST faults.
     payload = {"statusType": str(status_type), "status": status_to_send}
     data = json.dumps(payload)
@@ -712,7 +713,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
 
         # This prevents commands from previous nights/runs suddenly running
         # when wema.py is booted (has happened a bit!)
-        url_job = "https://jobs.photonranch.org/jobs/getnewjobs"
+        url_job = f"{PTR_JOBS_ROOT}/getnewjobs"
         body = {"site": self.config['wema_name']}
         
         try:
@@ -1178,7 +1179,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
         """
 
 
-        url_job = "https://jobs.photonranch.org/jobs/getnewjobs"
+        url_job = f"{PTR_JOBS_ROOT}/getnewjobs"
         body = {"site": self.config['wema_name']}
         cmd = {}
         # Get a list of new jobs to complete (this request
@@ -1455,7 +1456,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                             
                             # Call out to aws to get current main scope pointing and ra and dec
                             
-                            uri_status = f"https://status.photonranch.org/status/{sync_obs}/device"
+                            uri_status = f"{PTR_STATUS_ROOT}/{sync_obs}/device"
                             try:
                                 #plog ("Grabbing obs status")
 
@@ -2378,7 +2379,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     if not self.morning_flats_finished:
                         completed=[]
                         for obsid in self.obs_ids:
-                            uri_status = f"https://status.photonranch.org/status/{obsid}/obs_settings/"
+                            uri_status = f"{PTR_STATUS_ROOT}/{obsid}/obs_settings/"
     
                             
                             try:
@@ -2480,7 +2481,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
 
     def send_to_user(self, p_log, p_level="INFO"):
         """ """
-        url_log = "https://logs.photonranch.org/logs/newlog"
+        url_log = f"{PTR_LOGS_ROOT}/newlog"
         body = json.dumps(
             {
                 "site": self.config["obsp_ids"][0],
@@ -2889,7 +2890,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 if forecast_status is not None:
                     lane = "forecast"
                     obsy = self.config['wema_name']
-                    url = f"https://status.photonranch.org/status/{obsy}/status"
+                    url = f"{PTR_STATUS_ROOT}/{obsy}/status"
     
                     payload = json.dumps({
                         "statusType": "forecast",
@@ -3431,7 +3432,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
             obs_properties_dict={}
             
             for obsid in self.obs_ids:
-                uri_status = f"https://status.photonranch.org/status/{obsid}/device"
+                uri_status = f"{PTR_STATUS_ROOT}/{obsid}/device"
 
                 
                 try:

@@ -1,4 +1,8 @@
-import win32com.client
+try:
+    import win32com.client
+except ImportError:  # not on Windows -- Alpaca drivers do not need it
+    win32com = None
+from devices.alpaca_driver import is_alpaca, dispatch
 from global_yard import g_dev
 #import redis
 import time
@@ -254,7 +258,13 @@ class Enclosure:
         g_dev['enc'] = self
         self.slew_latch = False
         self.dome_open = None  # Just initialising this variable
-        #self.mode = self.config['site_enclosures_default_mode'] # Just initialising this variable
+        # get_status reads self.mode on every call, so it has to exist.
+        # Falls back rather than requiring the key, since the enclosure
+        # block carries its own 'mode' in some configs.
+        self.mode = self.config.get(
+            'site_enclosures_default_mode',
+            self.config.get('enclosure', {}).get('enclosure1', {}).get('mode', 'Automatic'),
+        )
         self.roof_open = None
         #if self.config['site_in_automatic_default'] == "Automatic":
 
@@ -317,6 +327,19 @@ class Enclosure:
                 self.http_driver = True
                 
                 
+            elif is_alpaca(driver):
+                # Same interface as the COM object, so only construction
+                # differs; the call sites below are untouched.
+                self.http_driver = False
+                self.enclosure = dispatch(driver)
+                plog(self.enclosure)
+                try:
+                    if not self.enclosure.Connected:
+                        self.enclosure.Connected = True
+                    plog('Alpaca enclosure connected: ' + str(driver))
+                except Exception as e:
+                    plog('Alpaca enclosure NOT connected: ' + str(e))
+
             elif not self.dummy:
                 self.http_driver = False
                 win32com.client.pythoncom.CoInitialize()

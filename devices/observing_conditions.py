@@ -21,7 +21,11 @@ import json
 import socket
 import time
 import os
-import win32com.client
+try:
+    import win32com.client
+except ImportError:  # not on Windows -- Alpaca drivers do not need it
+    win32com = None
+from devices.alpaca_driver import is_alpaca, dispatch
 # import redis
 import traceback
 
@@ -93,7 +97,22 @@ class ObservingConditions:
             if driver == 'aagsolo':
                 self.aagsolo=True
                 
-            if not self.aagsolo and not self.config['observing_conditions']['observing_conditions1']["name"] == 'SkyAlert Custom for ARO':
+            if is_alpaca(driver):
+                # ObservingConditions over Alpaca. alpyca exposes the same
+                # members as the COM object, so readings below are unchanged.
+                self.sky_monitor = dispatch(driver)
+                self.sky_monitor.Connected = True
+                plog('Alpaca observing_conditions connected: ' + str(driver))
+
+                # A SafetyMonitor, where configured, stands in for the COM
+                # ok-to-open monitor: both answer the same question.
+                driver_2 = config["observing_conditions"]["observing_conditions1"].get("driver_2")
+                if is_alpaca(driver_2):
+                    self.sky_monitor_oktoopen = dispatch(driver_2)
+                    self.sky_monitor_oktoopen.Connected = True
+                    plog('Alpaca safety monitor connected: ' + str(driver_2))
+
+            elif not self.aagsolo and not self.config['observing_conditions']['observing_conditions1']["name"] == 'SkyAlert Custom for ARO':
                 win32com.client.pythoncom.CoInitialize()
                 self.sky_monitor = win32com.client.Dispatch(driver)
                 self.sky_monitor.connected = True
