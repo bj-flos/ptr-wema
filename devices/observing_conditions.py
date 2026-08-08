@@ -688,7 +688,10 @@ class ObservingConditions:
 
 
             try:
-                self.new_pressure = round(float(self.pressure[0]), 2)  # was [0]), 2)  #NB this is an unfinished lame attempt to index by month.
+                # was [0]), 2) -- self.pressure is a float, so indexing it
+                # threw TypeError on every call and fell through to the
+                # except below. Matches the fix already applied above.
+                self.new_pressure = round(float(self.pressure), 2)
 
             except:
                 self.new_pressure = round(float(self.pressure), 2)
