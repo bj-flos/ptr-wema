@@ -57,9 +57,12 @@ wema_config = {
     'send_hourly_cloud_forecast_emails' : False,
 
     # These are just the bootup default values.
-    # Off until the OWM key has a One Call 3.0 subscription: wema.py calls
-    # pro.openweathermap.org/data/3.0/onecall, which 401s without one.
-    'OWM_active': False,
+    # On. wema.py calls pro.openweathermap.org/data/3.0/onecall, which needs
+    # a One Call subscription on the key in secrets.txt. While that returns
+    # 401 the report reads negative, and since wx_ok is the AND of every
+    # active source, the combined verdict is false regardless of local
+    # conditions.
+    'OWM_active': True,
     # On, so wx_ok reflects the Alpaca ObservingConditions readings.
     # With every source off, wema.py reports wx_ok as "Not considered",
     # which photonranch-status coerces to false and ptr_ui draws as

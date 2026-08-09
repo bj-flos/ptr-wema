@@ -499,6 +499,22 @@ def send_status(obsy, status_type, status_to_send):
         plog(f"Request exception: {str(e)}")
 
 
+def _pct(value, places=1):
+    """Format a forecast percentage that may be missing.
+
+    Providers we have no subscription for, or that did not answer, leave their
+    value at None. Rounding that raises, which used to abort the whole forecast
+    summary, so one missing provider hid every other reading. Missing values
+    now read 'n/a' and the rest of the summary still prints.
+    """
+    if value is None:
+        return "n/a"
+    try:
+        return str(round(value, places)) + "%"
+    except TypeError:
+        return str(value)
+
+
 class WxEncAgent:
     """A class for weather enclosure functionality."""
     
@@ -2212,28 +2228,28 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 try:
                     plog ("****************************")
                     plog("FORECAST DERIVED CLOUD COVER")
-                    plog("OWM cloud cover: " +str(round(self.owm_cloud_cover,1)) +'%')
-                    plog("Open Meteo cloud cover: " +str(round(self.open_meteo_cloud_cover,1))+'%')
-                    plog("TomorrowIO Now: " +str(round(self.tomorrowio_cloud_now,1))+'%')
-                    plog("Pirate Now: " +str(round(self.pirate_clouds_now,1))+'%')
-                    plog("Metocean Now: " +str(round(self.metocean_clouds_now,1))+'%')
-                    plog("Worldweather Now: " +str(round(self.worldweather_current_cloud,1))+'%')
+                    plog("OWM cloud cover: " +_pct(self.owm_cloud_cover))
+                    plog("Open Meteo cloud cover: " +_pct(self.open_meteo_cloud_cover))
+                    plog("TomorrowIO Now: " +_pct(self.tomorrowio_cloud_now))
+                    plog("Pirate Now: " +_pct(self.pirate_clouds_now))
+                    plog("Metocean Now: " +_pct(self.metocean_clouds_now))
+                    plog("Worldweather Now: " +_pct(self.worldweather_current_cloud))
                     
                     plog('**')
                     
-                    plog("OWM Next Hour: " +str(round(self.owm_cloud_cover_next_hour,1))+'%')
-                    plog("Open Meteo Next Hour: " +str(round(self.open_meteo_cloud_cover_next_hour,1))+'%')
-                    plog("TomorrowIO Next Hour: " +str(round(self.tomorrowio_cloud_inanhour,1))+'%')
+                    plog("OWM Next Hour: " +_pct(self.owm_cloud_cover_next_hour))
+                    plog("Open Meteo Next Hour: " +_pct(self.open_meteo_cloud_cover_next_hour))
+                    plog("TomorrowIO Next Hour: " +_pct(self.tomorrowio_cloud_inanhour))
                     
-                    plog("Pirate Next Hour: " +str(round(self.pirate_clouds_inanhour,1))+'%')
+                    plog("Pirate Next Hour: " +_pct(self.pirate_clouds_inanhour))
                     
-                    plog("Metocean Next Hour: " +str(round(self.metocean_clouds_inanhour,1))+'%')
+                    plog("Metocean Next Hour: " +_pct(self.metocean_clouds_inanhour))
                     
-                    plog("Worldweather Next Hour: " +str(round(self.worldweather_nexthour_cloud,1))+'%')
+                    plog("Worldweather Next Hour: " +_pct(self.worldweather_nexthour_cloud))
                     
                     plog('**')
                     
-                    plog("Median cloud cover from all estimates: "+str(round(self.medianforecast_current_cloud_cover,1))+'%')
+                    plog("Median cloud cover from all estimates: "+_pct(self.medianforecast_current_cloud_cover))
         
                     plog("**************************************************************")
                 except:
@@ -2781,18 +2797,29 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 
                
                 
-                # Pro users use the pro subdomain
-                url = "https://pro.openweathermap.org/data/3.0/onecall"
+                # One Call 4.0 splits current conditions and the hourly timeline
+                # across two endpoints. 3.0 served both from one URL but needs a
+                # separate One Call by Call subscription, and answers 401 without it.
                 params = {
                     "lat": self.latitude,
                     "lon": self.longitude,
                     "appid": self.owm_api_key,
-                    "exclude": "minutely,alerts",  # Customize what to exclude
                     "units": "metric"
                 }
-                
-                response = requests.get(url, params=params)
-                data = response.json()
+
+                current_url = "https://api.openweathermap.org/data/4.0/onecall/current"
+                hourly_url = "https://api.openweathermap.org/data/4.0/onecall/timeline/1h"
+
+                current_response = requests.get(current_url, params=params, timeout=30)
+                hourly_response = requests.get(hourly_url, params=params, timeout=30)
+
+                # Both wrap their payload in a "data" list: one entry for current,
+                # one per hour for the timeline. Reshape into the 3.0 layout so the
+                # rest of this method is unchanged.
+                data = {
+                    "current": current_response.json()["data"][0],
+                    "hourly": hourly_response.json()["data"],
+                }
     
                 self.weather_report_run_timer = time.time()
                 
