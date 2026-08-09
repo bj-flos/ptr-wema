@@ -131,7 +131,7 @@ wema_config = {
                                     #  under the control of one wema
     'name': 'Linux Alpaca development enclosure',
     'airport_code':  'BWT: Wynyard',
-    'location': 'Burnie, Tasmania, Australia',
+    'location': 'Mayhill, New Mexico, USA',
     'telescope_description': 'n.a.',
     'observatory_url': '',   #  This is meant to be optional
     'observatory_logo': None,   # I expect these will ususally end up as .png format icons
@@ -142,17 +142,17 @@ wema_config = {
     'location _pole_monitor': None,  # This probably gets us to some sort of image (Polaris in the North)
     'location_seeing_report': None,  # Probably a path to a jpeg or png graph.
     'debug_flag': False,  # Be careful about setting this flag True when pushing up to dev!
-    'TZ_database_name':  'America/Los_Angeles',
+    'TZ_database_name':  'America/Denver',
     'mpc_code':  'ZZ23',    #  This is made up for now.
-    'time_offset':  11,   #  These two keys may be obsolete given the new TZ stuff
-    'timezone': 'PST',      #  This was meant to be coloquial Time zone abbreviation, alternate for "TX_data..."
+    'time_offset':  -7,   #  These two keys may be obsolete given the new TZ stuff
+    'timezone': 'MST',      #  This was meant to be coloquial Time zone abbreviation, alternate for "TX_data..."
     # 'latitude': -41.063610,     #  Decimal degrees, North is Positive
     # 'longitude': 145.875275,   #  Decimal degrees, West is negative
-    'latitude': 34.4326,     #  Decimal degrees, North is Positive
-    'longitude': -119.8630,   #  Decimal degrees, West is negative
-    'elevation': 7,    #  meters above sea level
+    'latitude': 32.913,     #  Decimal degrees, North is Positive
+    'longitude': -105.52528,   #  Decimal degrees, West is negative
+    'elevation': 2194.56,    #  meters above sea level
     'reference_ambient':  10,  #  Degrees Celsius.  Alternately 12 entries, one for every - mid month.
-    'reference_pressure':  867.254,    #mbar   A rough guess 20200315
+    'reference_pressure':  776.0,    #mbar   A rough guess 20200315
     
     'wema_has_control_of_roof': True,
     'wema_allowed_to_open_roof': True,
