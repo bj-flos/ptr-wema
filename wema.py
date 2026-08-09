@@ -1866,6 +1866,19 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 self.local_weather_ok = dewpoint_gap and temp_bounds and wind_limit and sky_amb_limit  and sky_temp_limit and humidity_limit and not rain_limit and not local_cloud_cover and not forecast_cloud_cover 
             else:
                 self.local_weather_ok =  not forecast_cloud_cover 
+
+            # An ok-to-open monitor reporting unsafe overrides the readings:
+            # it exists precisely to say no when the numbers look fine. Only
+            # an explicit No vetoes, so a missing or unreadable monitor cannot
+            # quietly hold the roof shut.
+            try:
+                safety_monitor_ok = ocn_status['observing_conditions'][
+                    'observing_conditions1'].get('safety_monitor_ok')
+            except Exception:
+                safety_monitor_ok = None
+            if safety_monitor_ok == 'No':
+                self.local_weather_ok = False
+                wx_reasons.append('Safety monitor reports unsafe.')
             
             
             

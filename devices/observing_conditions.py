@@ -695,8 +695,24 @@ class ObservingConditions:
 
             except:
                 self.new_pressure = round(float(self.pressure), 2)
+            # driver_2 is the ok-to-open monitor. It answers a different
+            # question from the weather readings -- "is it safe" rather than
+            # "is it clear" -- so it gets its own field instead of being
+            # folded silently into them. 'n.a.' when no monitor is configured.
+            safety_monitor_ok = 'n.a.'
+            monitor = getattr(self, 'sky_monitor_oktoopen', None)
+            if monitor is not None:
+                try:
+                    safety_monitor_ok = 'Yes' if monitor.IsSafe else 'No'
+                except Exception:
+                    # Unreadable is not the same as unsafe, but it must not
+                    # read as safe either.
+                    safety_monitor_ok = 'unknown'
+                    plog('observing_conditions: cannot read the safety monitor')
+
             try:
                 status = {
+                    "safety_monitor_ok": safety_monitor_ok,
                     "temperature_C": round(self.temperature, 2),
                     "pressure_mbar": self.new_pressure,
                     "humidity_%": self.sky_monitor.Humidity,
