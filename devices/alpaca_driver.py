@@ -155,3 +155,42 @@ def CoInitialize():
     remaining call sites stay harmless.
     """
     return None
+
+
+# Devices are connected once at startup. If the Alpaca server restarts, that
+# connection is gone and every subsequent read raises NotConnected -- silently,
+# because the call sites already catch exceptions. Reconnecting on demand turns
+# a permanent outage back into a short one.
+_last_reconnect_attempt = {}
+RECONNECT_INTERVAL_S = 30
+
+
+def reconnect(device, name=None, log=None):
+    """Try to re-establish Connected on an Alpaca device.
+
+    Throttled per device so a server that is genuinely down is not hammered on
+    every status cycle. Returns True when the device is connected afterwards.
+    """
+    import time
+
+    key = name or id(device)
+    now = time.time()
+    if now - _last_reconnect_attempt.get(key, 0) < RECONNECT_INTERVAL_S:
+        return False
+    _last_reconnect_attempt[key] = now
+
+    try:
+        if device.Connected:
+            return True
+    except Exception:
+        pass  # reading Connected fails too when the server is unreachable
+
+    try:
+        device.Connected = True
+        if log:
+            log("Alpaca device reconnected: " + str(key))
+        return True
+    except Exception as e:
+        if log:
+            log("Alpaca reconnect failed for " + str(key) + ": " + str(e))
+        return False

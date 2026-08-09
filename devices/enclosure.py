@@ -2,7 +2,7 @@ try:
     import win32com.client
 except ImportError:  # not on Windows -- Alpaca drivers do not need it
     win32com = None
-from devices.alpaca_driver import is_alpaca, dispatch
+from devices.alpaca_driver import is_alpaca, dispatch, reconnect
 from global_yard import g_dev
 #import redis
 import time
@@ -365,6 +365,7 @@ class Enclosure:
         # self.last_slewing = False
         self.prior_status = {'enclosure_mode': 'Manual'}  # Just to initialze this rarely used variable.
         self.status = None  # Initialise this to cut down on faults.
+        self.enclosure_message = '-'  # Reason shown alongside shutter_status.
 
         self.guarded_roof_open_timer = time.time()
 
@@ -470,17 +471,33 @@ class Enclosure:
             else:
                 try:
                     shutter_status = self.enclosure.ShutterStatus
-                except:
-                    plog("self.enclosure.Roof.ShutterStatus -- Faulted. ")
+                except Exception:
+                    # A dropped Alpaca connection reads exactly like a broken
+                    # dome. Try to re-establish it before reporting a fault,
+                    # since 'Software Fault' also blocks the roof reopening.
                     shutter_status = 5
+                    if is_alpaca(self.driver) and reconnect(
+                            self.enclosure, name='enclosure', log=plog):
+                        try:
+                            shutter_status = self.enclosure.ShutterStatus
+                            self.enclosure_message = 'recovered: reconnected to the enclosure driver'
+                        except Exception:
+                            shutter_status = 5
+                    if shutter_status == 5:
+                        plog("self.enclosure.Roof.ShutterStatus -- Faulted. ")
+                        self.enclosure_message = (
+                            'cannot read the enclosure driver at '
+                            + str(self.driver) + ' -- reconnect attempted')
         
                 if shutter_status == 0:
                     stat_string = "Open"
                     self.shutter_is_closed = False
+                    self.enclosure_message = '-'
                     #g_dev['redis'].set('Shutter_is_open', True)
                 elif shutter_status == 1:
                     stat_string = "Closed"
                     self.shutter_is_closed = True
+                    self.enclosure_message = '-'
                     #g_dev['redis'].set('Shutter_is_open', False)
                 elif shutter_status == 2:
                     stat_string = "Opening"
@@ -507,7 +524,10 @@ class Enclosure:
                     #g_dev['redis'].set('Shutter_is_open', False)
             self.status_string = stat_string
 
-        status = {'shutter_status': stat_string}  #Re-enabled 10142023 WER
+        status = {'shutter_status': stat_string,
+                  # Why, not just what: a dropped driver connection
+                  # otherwise looks identical to a shut roof.
+                  'enclosure_message': getattr(self, 'enclosure_message', '-')}
         #          'enclosure_synchronized': True, #self.following, 20220103_0135 WER
         #          'dome_azimuth': 0,
         #          'dome_slewing': False,
