@@ -25,7 +25,7 @@ try:
     import win32com.client
 except ImportError:  # not on Windows -- Alpaca drivers do not need it
     win32com = None
-from devices.alpaca_driver import is_alpaca, dispatch
+from devices.alpaca_driver import is_alpaca, dispatch, reconnect
 # import redis
 import traceback
 
@@ -676,7 +676,19 @@ class ObservingConditions:
                 self.meas_sky_lux = linearize_unihedron(uni_measure)
                 status["meas_sky_mpsas"] = uni_measure
 
-            self.temperature = round(self.sky_monitor.Temperature, 2)
+            try:
+                self.temperature = round(self.sky_monitor.Temperature, 2)
+            except Exception:
+                # A dropped Alpaca connection makes every reading raise from
+                # here on, and nothing else re-establishes it: the weather
+                # simply stops updating while the wema keeps publishing.
+                if is_alpaca(self.driver) and reconnect(
+                        self.sky_monitor, name='observing_conditions', log=plog):
+                    self.temperature = round(self.sky_monitor.Temperature, 2)
+                else:
+                    plog("observing_conditions: cannot read the weather driver at "
+                         + str(self.driver) + " -- reconnect attempted")
+                    raise
             try:  # NB NB Boltwood vs. SkyAlert difference.  What about SRO?
                 self.pressure = self.sky_monitor.Pressure
                 assert self.pressure > 200
