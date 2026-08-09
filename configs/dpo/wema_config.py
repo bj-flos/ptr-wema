@@ -1,15 +1,15 @@
-# Linux dev WEMA (`dev`) -- host enclosure for the dev1 observatory.
+# WEMA `DPO` -- host enclosure for the CDK17 observatory.
 #
 # Derived from configs/tbo (the all-dummy simulator site), matching how
-# ptr-observatory's configs/dev was derived. Differences:
+# ptr-observatory's configs/dpo17 was derived. Differences:
 #
 #   * the enclosure and weather drivers are Alpaca URLs served by the ASCOM
 #     Alpaca Simulators on 127.0.0.1:11111, rather than COM ProgIDs or 'dummy'
 #   * driver_2 is the Alpaca SafetyMonitor, standing in for the COM
 #     ok-to-open monitor
-#   * identity matches configs/dev/wema-dev.json in ptr-observatory
+#   * identity matches configs/dpo17/wema-dpo.json in ptr-observatory
 #
-# Select it with PTR_WEMA_SITE=dev, since the hostname heuristic in
+# Select it with PTR_WEMA_SITE=dpo, since the hostname heuristic in
 # ptr_config.py cannot find it.
 
 
@@ -29,17 +29,17 @@ import json
 
 # NB NB NB json is not bi-directional with tuples (), instead, use lists [], nested if tuples are needed.
 degree_symbol = "°"
-wema_name = 'dev'
+wema_name = 'DPO'
 instance_type = 'wema'
 
 wema_config = {
 
     #'wema': 'eco',
-    'wema_name': 'dev',
+    'wema_name': 'DPO',
     'instance_type': 'wema',
     'instance_is_private': False,
 
-    'obsp_ids': ['dev1'],  # a list of the obsp's in an enclosure.  
+    'obsp_ids': ['DPO17'],  # a list of the obsp's in an enclosure.  
 
     #'obs_id': None,  # a WEMA is not a telescope aka Observatory
     #'observatory_location': site_name.lower(),  # in LCO case, an airport code such as OGG
@@ -129,7 +129,7 @@ wema_config = {
 
     'host_wema_site_name':  'TBO',  # The umbrella header for obsys in close geographic proximity,
                                     #  under the control of one wema
-    'name': 'Linux Alpaca development enclosure',
+    'name': 'Photon Ranch Dimension Point',
     'airport_code':  'BWT: Wynyard',
     'location': 'Mayhill, New Mexico, USA',
     'telescope_description': 'n.a.',
