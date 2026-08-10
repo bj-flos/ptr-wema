@@ -129,7 +129,7 @@ wema_config = {
 
     'host_wema_site_name':  'TBO',  # The umbrella header for obsys in close geographic proximity,
                                     #  under the control of one wema
-    'name': 'Photon Ranch Dimension Point',
+    'name': 'Dimension Point Observatory',
     'airport_code':  'BWT: Wynyard',
     'location': 'Mayhill, New Mexico, USA',
     'telescope_description': 'n.a.',
