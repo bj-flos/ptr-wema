@@ -107,6 +107,9 @@ class ObservingConditions:
                 # A SafetyMonitor, where configured, stands in for the COM
                 # ok-to-open monitor: both answer the same question.
                 driver_2 = config["observing_conditions"]["observing_conditions1"].get("driver_2")
+                # Kept on the instance so the status path can tell an Alpaca
+                # monitor (which can be reconnected) from a COM one.
+                self.driver_2 = driver_2
                 if is_alpaca(driver_2):
                     self.sky_monitor_oktoopen = dispatch(driver_2)
                     self.sky_monitor_oktoopen.Connected = True
@@ -715,12 +718,33 @@ class ObservingConditions:
             monitor = getattr(self, 'sky_monitor_oktoopen', None)
             if monitor is not None:
                 try:
-                    safety_monitor_ok = 'Yes' if monitor.IsSafe else 'No'
+                    connected = bool(monitor.Connected)
                 except Exception:
-                    # Unreadable is not the same as unsafe, but it must not
-                    # read as safe either.
+                    connected = False
+
+                if not connected and is_alpaca(getattr(self, 'driver_2', None)):
+                    # This is the dangerous case, not an exception: a
+                    # disconnected Alpaca monitor answers IsSafe with false and
+                    # ErrorNumber 0, which reads exactly like a genuine "do not
+                    # open" and would hold the roof shut for good.
+                    connected = reconnect(monitor, name='safety_monitor',
+                                          log=plog)
+
+                if not connected:
+                    # Unknown must not veto -- only an explicit No does -- or a
+                    # dropped connection silently closes the site.
                     safety_monitor_ok = 'unknown'
-                    plog('observing_conditions: cannot read the safety monitor')
+                    plog('observing_conditions: safety monitor not connected, '
+                         'reporting unknown rather than unsafe')
+                else:
+                    try:
+                        safety_monitor_ok = 'Yes' if monitor.IsSafe else 'No'
+                    except Exception:
+                        # Unreadable is not the same as unsafe, but it must not
+                        # read as safe either.
+                        safety_monitor_ok = 'unknown'
+                        plog('observing_conditions: cannot read the safety '
+                             'monitor')
 
             try:
                 status = {
