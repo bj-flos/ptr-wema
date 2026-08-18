@@ -684,10 +684,11 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
         # If it is too many, then it shuts down for the whole evening. 
         self.opens_this_evening = 0
         self.local_weather_ok = None
-        self.weather_text_report = []       
+        # The structured report published on the owm_report lane.
+        self.owm_report_payload = {}
+        self.hourly_report_rows = []
         self.times_to_open = []
         self.times_to_close = []
-        self.hourly_report_holder=[]
         self.weather_report_open_at_start = False
         self.nightly_reset_complete = False  
         self.keep_open_all_night = False
@@ -1860,7 +1861,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
             ocn_status['observing_conditions']['observing_conditions1']["OWM_weather_ok"] = self.weather_report_open_at_start
             
             if self.owm_active and not self.weather_report_open_at_start:
-                wx_reasons.append("OWM Report negative.")
+                wx_reasons.append("OpenWeatherMap Report negative.")
     
             if self.local_weather_active and self.owm_active:
                 combined_weather_ok = self.local_weather_ok and self.weather_report_open_at_start
@@ -2137,10 +2138,6 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 plog("Nightly Reset Complete        : " + str(self.nightly_reset_complete))
                 plog("\n")
     
-                if len(self.weather_text_report) >0:
-                    for line in self.weather_text_report:
-                        plog (line)
-            
                 if not self.owm_active:
                     plog("OWM is off. OWM information is advisory only, it is currently inactive.")
     
@@ -2930,36 +2927,31 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 hourly_fitzgerald_number=[]
                 hourly_fitzgerald_number_by_hour=[]
                 hourcounter = 0
-                self.hourly_report_holder=[]
+                self.hourly_report_rows=[]
                 for entry in fitzgerald_weather_number_grid:
                     if hourcounter >= hours_until_start_of_observing and hourcounter <= hours_until_end_of_observing:
-                        
-
-                        textdescription= entry[4]+ '   Cloud:   ' + str(entry[1]) + '%     Hum:    ' + str(entry[0]) +   '%    Wind:  ' +str(entry[2])+' m/s   rain probability: ' + str(float(entry[9]) * 100) +'%'  # WER changed to make more readable.
-
-
                         hourly_fitzgerald_number.append(entry[6])
-                        hourly_fitzgerald_number_by_hour.append([entry[5],entry[6],textdescription])
+                        hourly_fitzgerald_number_by_hour.append([entry[5],entry[6]])
+                        # The hour as a record. Presentation is the consumer's.
+                        self.hourly_report_rows.append({
+                            'hour_utc': entry[5],
+                            'iso_time': entry[7],
+                            'fitzgerald_number': entry[6],
+                            'condition': entry[3],
+                            'description': entry[4],
+                            'cloud_pct': entry[1],
+                            'humidity_pct': entry[0],
+                            'wind_ms': entry[2],
+                            'temperature_c': entry[8],
+                            'rain_probability_pct': float(entry[9]) * 100,
+                            'roof_plan': None,
+                        })
                     hourcounter=hourcounter+1
                 
-                plog ("Hourly Fitzgerald number report")
-                self.hourly_report_holder.append("Hourly Fitzgerald number report")
-                
-                plog ("For Evening of " +str(g_dev['dayhyphened']) )
-                self.hourly_report_holder.append("For LOCAL Evening of " +str(g_dev['dayhyphened']) )
-                
-                
-                utc_string = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")            
-                plog("Time of Weather Report: " + str(utc_string))
-                self.hourly_report_holder.append("Time of Weather Report (UTC): " + str(utc_string))
-                
-                plog ("*******************************")
-                self.hourly_report_holder.append("*******************************")
-                plog ("Hour(UTC) |  FNumber |  Text    ")
-                self.hourly_report_holder.append("Hour(UTC) |  FNumber |  Text    ")
-                for line in hourly_fitzgerald_number_by_hour:
-                    plog (str(line[0]) + '         | '+ str(line[1]) + '        | ' + str(line[2]))
-                    self.hourly_report_holder.append(str(line[0]) + '         | '+ str(line[1]) + '        | ' + str(line[2]))
+                utc_string = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                plog("Weather forecast for the local evening of " + str(g_dev['dayhyphened'])
+                     + ", retrieved " + str(utc_string) + " UTC, covering "
+                     + str(len(hourly_fitzgerald_number_by_hour)) + " hours.")
 
                 
                 plog ("Night's total fitzgerald number: " + str(sum(hourly_fitzgerald_number)))
@@ -3027,46 +3019,44 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                         self.times_to_close.append([hours_bad_or_good[counter][0]])
     
     
-                self.weather_text_report=[]
-                # Construct the text!
-    
-                if len(self.hourly_report_holder) > 0:
-                    pasttitle = False
-                    firstentry = True
-                    for line in self.hourly_report_holder:
-                        self.weather_text_report.append(str(line))
-    
-                        if pasttitle == True:
-                            current_utc_hour = float(line.split(' ')[0])
-    
-                            if len(self.times_to_open) > 0:
-                                for entry in self.times_to_open:
-    
-                                    if int(current_utc_hour) == int(entry[0]) and not firstentry:
-                                        self.weather_text_report.append("OWM would plan to open the roof")
-                                
-                            if len(self.times_to_close) > 0:
-                                for entry in self.times_to_close:
-                                    
-                                    if int(current_utc_hour) == int(entry[0]):
-                                        self.weather_text_report.append("OWM would plan to close the roof")
-                            firstentry = False
-                            
-                        if 'Hour(UTC)' in line:
-                            pasttitle = True
-                            self.weather_text_report.append("-----------------------------")
-                            if g_dev['events']['Cool Down, Open'] > ephem_now:
-                                self.weather_text_report.append("Cool Down Open")
-                            if self.weather_report_open_at_start:
-                                self.weather_text_report.append("OWM would plan to open at this point.")
-                            else:
-                                self.weather_text_report.append("OWM would keep the roof shut at this point.")
-                    if g_dev['events']['Close and Park'] > ephem_now:
-                        self.weather_text_report.append("Close and Park")
-                    self.weather_text_report.append("-----------------------------")
+                # The report, as data. Hours the roof would open or
+                # close are marked on the hour they apply to, rather than
+                # spliced in as extra lines.
+                open_hours = set()
+                close_hours = set()
+                for entry in self.times_to_open:
+                    try:
+                        open_hours.add(int(entry[0]))
+                    except (TypeError, ValueError):
+                        pass
+                for entry in self.times_to_close:
+                    try:
+                        close_hours.add(int(entry[0]))
+                    except (TypeError, ValueError):
+                        pass
+                for row in self.hourly_report_rows:
+                    try:
+                        hour = int(float(row['hour_utc']))
+                    except (TypeError, ValueError):
+                        continue
+                    if hour in open_hours:
+                        row['roof_plan'] = 'open'
+                    elif hour in close_hours:
+                        row['roof_plan'] = 'close'
+
+                self.owm_report_payload = {
+                    'schema': 1,
+                    'generated_utc': utc_string,
+                    'local_evening': str(g_dev['dayhyphened']),
+                    'night_fitzgerald_number': self.night_fitzgerald_number,
+                    'open_at_start': bool(self.weather_report_open_at_start),
+                    'cool_down_open': bool(g_dev['events']['Cool Down, Open'] > ephem_now),
+                    'close_and_park': bool(g_dev['events']['Close and Park'] > ephem_now),
+                    'hours': self.hourly_report_rows,
+                }
     
                 status = {}
-                status['owm_report'] = json.dumps(self.weather_text_report)
+                status['owm_report'] = json.dumps(self.owm_report_payload)
                 lane = "owm_report"
                 
                 
@@ -3088,7 +3078,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
 
             try:
                 status = {}
-                status['owm_report'] = json.dumps(self.weather_text_report)
+                status['owm_report'] = json.dumps(self.owm_report_payload)
                 lane = "owm_report"
                 send_status(self.config['wema_name'], lane, status)
             except:
