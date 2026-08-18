@@ -3049,7 +3049,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                                 for entry in self.times_to_close:
                                     
                                     if int(current_utc_hour) == int(entry[0]):
-                                        self.weather_text_report.append("OpenWeatherMap would plan to close the roof")
+                                        self.weather_text_report.append("Forecast would indicate that the roof should be closed.")
                             firstentry = False
                             
                         if 'Hour(UTC)' in line:
@@ -3058,7 +3058,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                             if g_dev['events']['Cool Down, Open'] > ephem_now:
                                 self.weather_text_report.append("Cool Down Open")
                             if self.weather_report_open_at_start:
-                                self.weather_text_report.append("OpenWeatherMap would plan to open at this point.")
+                                self.weather_text_report.append("Forecast would indicate that roof could open.")
                             else:
                                 self.weather_text_report.append("OpenWeatherMap would keep the roof shut at this point.")
                     if g_dev['events']['Close and Park'] > ephem_now:
