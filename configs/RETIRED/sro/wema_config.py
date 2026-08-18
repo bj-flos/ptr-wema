@@ -111,6 +111,9 @@ wema_config = {
     'latitude': 37.0701111,     #  Decimal degrees, North is Positive
     'longitude': -119.412417,   #  Decimal degrees, West is negative
     'elevation': 1405,    #  meters above sea level
+    # Clear Sky Chart key from cleardarksky.com, eg. 'SaBarbCA'. The UI builds
+    # the chart URLs from this; None means no chart is shown for the site.
+    'clear_sky_chart_id': 'SROCA',
     'reference_ambient':  10,  #  Degrees Celsius.  Alternately 12 entries, one for every - mid month.
     'reference_pressure':  867.254,    #mbar   A rough guess 20200315
 
