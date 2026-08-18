@@ -602,7 +602,7 @@ class Events:
                      #('End Eve Sky Flats  ', ephem.Date(self.civilDusk + self.config['end_eve_sky_flats_offset']/1440)),
                      #('Clock & Auto Focus ', ephem.Date(self.nautDusk_plus_half - 8/1440.)),
                      
-                     #('Observing Begins   ', ephem.Date(self.nautDusk_plus_half)),
+                     ('Observing Begins   ', ephem.Date(self.nautDusk_plus_half)),
                      #('Observing Begins   ', ephem.Date(obs_window := self.astroDark - self.config['astro_dark_buffer']/1440)),
                      #('Clock & Auto Focus ', ephem.Date(obs_window + self.config['clock_and_auto_focus_offset']/1440)),
                      ('Naut Dusk          ', ephem.Date(self.nauticalDusk)),
