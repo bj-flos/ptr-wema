@@ -607,7 +607,7 @@ class Events:
                      #('Clock & Auto Focus ', ephem.Date(obs_window + self.config['clock_and_auto_focus_offset']/1440)),
                      ('Naut Dusk          ', ephem.Date(self.nauticalDusk)),
                      ('Astro Dark         ', ephem.Date(self.astroDark)),
-                     ('Middle of Night    ', ephem.Date(self.middleNight)),
+                     ('Astro Midnight     ', ephem.Date(self.middleNight)),
                      ('End Astro Dark     ', ephem.Date(self.astroEnd)),
                      ('Observing Ends     ', ephem.Date(self.nautDawn_minus_half)),
                      #('Observing Ends     ', ephem.Date(self.astroEnd + self.config['astro_dark_buffer']/1440)),
