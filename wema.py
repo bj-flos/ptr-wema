@@ -2931,11 +2931,18 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 hourly_fitzgerald_number_by_hour=[]
                 hourcounter = 0
                 self.hourly_report_holder=[]
+                # Pad the description so the 'Cloud:' column lines up. The width
+                # comes from the hours this report actually prints, so one long
+                # description cannot leave the whole table over-indented.
+                description_width = max(
+                    (len(str(row[4])) for hour, row in enumerate(fitzgerald_weather_number_grid)
+                     if hours_until_start_of_observing <= hour <= hours_until_end_of_observing),
+                    default=0)
                 for entry in fitzgerald_weather_number_grid:
                     if hourcounter >= hours_until_start_of_observing and hourcounter <= hours_until_end_of_observing:
                         
 
-                        textdescription= entry[4]+ '   Cloud:   ' + str(entry[1]) + '%     Hum:    ' + str(entry[0]) +   '%    Wind:  ' +str(entry[2])+' m/s   rain probability: ' + str(float(entry[9]) * 100) +'%'  # WER changed to make more readable.
+                        textdescription= str(entry[4]).ljust(description_width)+ '   Cloud:   ' + str(entry[1]) + '%     Hum:    ' + str(entry[0]) +   '%    Wind:  ' +str(entry[2])+' m/s   rain probability: ' + str(float(entry[9]) * 100) +'%'  # WER changed to make more readable.
 
 
                         hourly_fitzgerald_number.append(entry[6])
@@ -3043,7 +3050,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                                 for entry in self.times_to_open:
     
                                     if int(current_utc_hour) == int(entry[0]) and not firstentry:
-                                        self.weather_text_report.append("OpenWeatherMap would plan to open the roof")
+                                        self.weather_text_report.append("Forecast would indicate that the roof could open.")
                                 
                             if len(self.times_to_close) > 0:
                                 for entry in self.times_to_close:
@@ -3058,9 +3065,9 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                             if g_dev['events']['Cool Down, Open'] > ephem_now:
                                 self.weather_text_report.append("Cool Down Open")
                             if self.weather_report_open_at_start:
-                                self.weather_text_report.append("Forecast would indicate that roof could open.")
+                                self.weather_text_report.append("Forecast would indicate that the roof could open.")
                             else:
-                                self.weather_text_report.append("OpenWeatherMap would keep the roof shut at this point.")
+                                self.weather_text_report.append("Forecast would indicate that the roof should remain closed.")
                     if g_dev['events']['Close and Park'] > ephem_now:
                         self.weather_text_report.append("Close and Park")
                     self.weather_text_report.append("-----------------------------")
