@@ -21,7 +21,11 @@ import json
 import socket
 import time
 import os
-import win32com.client
+try:
+    import win32com.client
+except ImportError:  # not on Windows -- Alpaca drivers do not need it
+    win32com = None
+from devices.alpaca_driver import is_alpaca, dispatch, reconnect
 # import redis
 import traceback
 
@@ -93,7 +97,25 @@ class ObservingConditions:
             if driver == 'aagsolo':
                 self.aagsolo=True
                 
-            if not self.aagsolo and not self.config['observing_conditions']['observing_conditions1']["name"] == 'SkyAlert Custom for ARO':
+            if is_alpaca(driver):
+                # ObservingConditions over Alpaca. alpyca exposes the same
+                # members as the COM object, so readings below are unchanged.
+                self.sky_monitor = dispatch(driver)
+                self.sky_monitor.Connected = True
+                plog('Alpaca observing_conditions connected: ' + str(driver))
+
+                # A SafetyMonitor, where configured, stands in for the COM
+                # ok-to-open monitor: both answer the same question.
+                driver_2 = config["observing_conditions"]["observing_conditions1"].get("driver_2")
+                # Kept on the instance so the status path can tell an Alpaca
+                # monitor (which can be reconnected) from a COM one.
+                self.driver_2 = driver_2
+                if is_alpaca(driver_2):
+                    self.sky_monitor_oktoopen = dispatch(driver_2)
+                    self.sky_monitor_oktoopen.Connected = True
+                    plog('Alpaca safety monitor connected: ' + str(driver_2))
+
+            elif not self.aagsolo and not self.config['observing_conditions']['observing_conditions1']["name"] == 'SkyAlert Custom for ARO':
                 win32com.client.pythoncom.CoInitialize()
                 self.sky_monitor = win32com.client.Dispatch(driver)
                 self.sky_monitor.connected = True
@@ -657,7 +679,19 @@ class ObservingConditions:
                 self.meas_sky_lux = linearize_unihedron(uni_measure)
                 status["meas_sky_mpsas"] = uni_measure
 
-            self.temperature = round(self.sky_monitor.Temperature, 2)
+            try:
+                self.temperature = round(self.sky_monitor.Temperature, 2)
+            except Exception:
+                # A dropped Alpaca connection makes every reading raise from
+                # here on, and nothing else re-establishes it: the weather
+                # simply stops updating while the wema keeps publishing.
+                if is_alpaca(self.driver) and reconnect(
+                        self.sky_monitor, name='observing_conditions', log=plog):
+                    self.temperature = round(self.sky_monitor.Temperature, 2)
+                else:
+                    plog("observing_conditions: cannot read the weather driver at "
+                         + str(self.driver) + " -- reconnect attempted")
+                    raise
             try:  # NB NB Boltwood vs. SkyAlert difference.  What about SRO?
                 self.pressure = self.sky_monitor.Pressure
                 assert self.pressure > 200
@@ -669,12 +703,52 @@ class ObservingConditions:
 
 
             try:
-                self.new_pressure = round(float(self.pressure[0]), 2)  # was [0]), 2)  #NB this is an unfinished lame attempt to index by month.
+                # was [0]), 2) -- self.pressure is a float, so indexing it
+                # threw TypeError on every call and fell through to the
+                # except below. Matches the fix already applied above.
+                self.new_pressure = round(float(self.pressure), 2)
 
             except:
                 self.new_pressure = round(float(self.pressure), 2)
+            # driver_2 is the ok-to-open monitor. It answers a different
+            # question from the weather readings -- "is it safe" rather than
+            # "is it clear" -- so it gets its own field instead of being
+            # folded silently into them. 'n.a.' when no monitor is configured.
+            safety_monitor_ok = 'n.a.'
+            monitor = getattr(self, 'sky_monitor_oktoopen', None)
+            if monitor is not None:
+                try:
+                    connected = bool(monitor.Connected)
+                except Exception:
+                    connected = False
+
+                if not connected and is_alpaca(getattr(self, 'driver_2', None)):
+                    # This is the dangerous case, not an exception: a
+                    # disconnected Alpaca monitor answers IsSafe with false and
+                    # ErrorNumber 0, which reads exactly like a genuine "do not
+                    # open" and would hold the roof shut for good.
+                    connected = reconnect(monitor, name='safety_monitor',
+                                          log=plog)
+
+                if not connected:
+                    # Unknown must not veto -- only an explicit No does -- or a
+                    # dropped connection silently closes the site.
+                    safety_monitor_ok = 'unknown'
+                    plog('observing_conditions: safety monitor not connected, '
+                         'reporting unknown rather than unsafe')
+                else:
+                    try:
+                        safety_monitor_ok = 'Yes' if monitor.IsSafe else 'No'
+                    except Exception:
+                        # Unreadable is not the same as unsafe, but it must not
+                        # read as safe either.
+                        safety_monitor_ok = 'unknown'
+                        plog('observing_conditions: cannot read the safety '
+                             'monitor')
+
             try:
                 status = {
+                    "safety_monitor_ok": safety_monitor_ok,
                     "temperature_C": round(self.temperature, 2),
                     "pressure_mbar": self.new_pressure,
                     "humidity_%": self.sky_monitor.Humidity,

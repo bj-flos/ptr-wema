@@ -25,7 +25,22 @@ for q in range(len(sys.path)):
 for remover in path_removals:
     sys.path.remove(remover)
 
+try:
+    # This module is imported before ptr_endpoints, so .env has not been read
+    # yet and PTR_WEMA_SITE below would be invisible.
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:      # python-dotenv is optional
+    pass
+
 pathdone = 0
+
+# An explicit override beats both discovery methods below, so a dev site can
+# run on a machine that is not named after it:  PTR_WEMA_SITE=dev
+_site_override = os.environ.get("PTR_WEMA_SITE")
+if _site_override:
+    sys.path.append(os.path.join(pathlib.Path().resolve(), "configs", _site_override.lower()))
+    pathdone = 1
 
 # First try to get the wemaname from a file in the directory above (..) ptr-observatory
 cwd = str(pathlib.Path().resolve())
@@ -35,6 +50,8 @@ wemaname_file = glob.glob(hwd + "wemaname*")
 
 try:
     #breakpoint()
+    if pathdone:
+        raise IndexError("site already selected by PTR_WEMA_SITE")
     site_name = wemaname_file[0].split("wemaname")[1].split('.')[0]
     # print(
     #     "Adding new config path: "
@@ -42,7 +59,7 @@ try:
     # )
     sys.path.append(os.path.join(pathlib.Path().resolve(), "configs", site_name))
     pathdone = 1
-except OSError:
+except (OSError, IndexError):
     print(
         "Could not find a wemaname* file in the directory above ptr-observatory \
         (e.g. wemanamesro).\n Trying another method..."
@@ -52,7 +69,9 @@ if pathdone == 0:
     print("Attempting wemaname approach to config file...")
 
     # NB May be better to split on '-' and use first part of wemaname.
-    host_site = socket.gethostname()[:3].lower()
+    # The hostname heuristic assumes a machine named after its site. Allow an
+    # explicit override so a dev site can run on any box:  PTR_WEMA_SITE=dev
+    host_site = os.environ.get("PTR_WEMA_SITE", socket.gethostname()[:3]).lower()
 
     #if host_site == "saf":
      #   host_site == "aro"  # NB NB THIS is a blatant hack. TODO Remove this
@@ -77,6 +96,11 @@ except ImportError:
     )
 
     try:
+        if not sys.stdin.isatty():
+            raise SystemExit(
+                "No site config found. Set PTR_WEMA_SITE (e.g. PTR_WEMA_SITE=dev), "
+                "add a wemaname* file, or run interactively."
+            )
         site_name = input("What site am I running at?\n")
         sys.path.append(os.path.join(pathlib.Path().resolve(), "configs", site_name))
         from site_config import *

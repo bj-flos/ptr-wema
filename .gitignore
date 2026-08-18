@@ -13,3 +13,10 @@ sandbox/
 
 .DS_Store
 secrets.txt
+
+# Local porting artifacts
+*.bak
+wema-run.log
+# plog builds a Windows path, which on Linux creates a literal C:/ directory
+C:/
+wema.log

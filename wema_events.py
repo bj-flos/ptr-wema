@@ -32,6 +32,7 @@ import time
 from math import degrees
 from global_yard import *
 from astropy.time import Time
+from ptr_endpoints import PTR_API_ROOT
 from wema_utility import plog
 import traceback
 from pprint import pprint
@@ -73,7 +74,7 @@ class Events:
             # Grab relevant info from OBS
             #obsconfig = config['wema_name']
             """Sends an update to the status endpoint."""
-            uri_status = f"https://api.photonranch.org/api/{obsid}/config/"
+            uri_status = f"{PTR_API_ROOT}/{obsid}/config/"
             try:
                 obs_config=reqs.get(uri_status, timeout=20).json()
             except:
