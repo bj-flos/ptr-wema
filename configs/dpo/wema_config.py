@@ -151,6 +151,9 @@ wema_config = {
     'latitude': 32.913,     #  Decimal degrees, North is Positive
     'longitude': -105.52528,   #  Decimal degrees, West is negative
     'elevation': 2194.56,    #  meters above sea level
+    # Clear Sky Chart key from cleardarksky.com, eg. 'SaBarbCA'. The UI builds
+    # the chart URLs from this; None means no chart is shown for the site.
+    'clear_sky_chart_id': None,
     'reference_ambient':  10,  #  Degrees Celsius.  Alternately 12 entries, one for every - mid month.
     'reference_pressure':  776.0,    #mbar   A rough guess 20200315
     
