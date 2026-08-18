@@ -499,6 +499,63 @@ def send_status(obsy, status_type, status_to_send):
         plog(f"Request exception: {str(e)}")
 
 
+def fitzgerald_number(humidity, clouds, wind_speed, description, pop):
+    """Score how unfit a period is for observing. Lower is better.
+
+    Wayne's scale: 0 is clear, under 100 good, under 600 dodgy, above that not
+    worth opening for. Any single disqualifying factor adds 101, so one bad
+    ingredient is enough to put a period out of range on its own.
+
+    Pulled out of the hourly loop so the daily forecast is graded on the same
+    thresholds rather than a second set that could drift from it.
+    """
+    score = 0
+
+    if 80 < humidity <= 85:
+        score += 4
+    elif 85 < humidity <= 90:
+        score += 20
+    elif 90 < humidity <= 100:
+        score += 101
+
+    if 20 < clouds <= 40:
+        score += 10
+    elif 40 < clouds <= 60:
+        score += 40
+    elif 60 < clouds <= 80:
+        score += 60
+    elif 80 < clouds <= 100:
+        score += 101
+
+    if 8 < wind_speed <= 12:
+        score += 1
+    elif 12 < wind_speed <= 15:
+        score += 4
+    elif 15 < wind_speed <= 20:
+        score += 40
+    elif 20 < wind_speed:
+        score += 101
+
+    if 'rain' in description or 'storm' in description or pop > 0:
+        score += 101
+
+    return score
+
+
+def weather_quality_number(fitz):
+    """The Fitzgerald number as the five bands the interface colours by."""
+    fitz = float(fitz)
+    if fitz < 11:
+        return 1
+    if fitz < 21:
+        return 2
+    if fitz < 41:
+        return 3
+    if fitz < 101:
+        return 4
+    return 5
+
+
 def _pct(value, places=1):
     """Format a forecast percentage that may be missing.
 
@@ -2817,19 +2874,10 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     "units": "metric"
                 }
 
-                current_url = "https://api.openweathermap.org/data/4.0/onecall/current"
-                hourly_url = "https://api.openweathermap.org/data/4.0/onecall/timeline/1h"
-
-                current_response = requests.get(current_url, params=params, timeout=30)
-                hourly_response = requests.get(hourly_url, params=params, timeout=30)
-
-                # Both wrap their payload in a "data" list: one entry for current,
-                # one per hour for the timeline. Reshape into the 3.0 layout so the
-                # rest of this method is unchanged.
-                data = {
-                    "current": current_response.json()["data"][0],
-                    "hourly": hourly_response.json()["data"],
-                }
+                params["exclude"] = "minutely,alerts"
+                response = requests.get(
+                    "https://api.openweathermap.org/data/3.0/onecall", params=params, timeout=30)
+                data = response.json()
     
                 self.weather_report_run_timer = time.time()
                 
@@ -2856,39 +2904,11 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     iso_time = dt.isoformat()  # '2025-05-08T07:00:00'
                     clock_hour = iso_time.split('T')[1].split(':')[0] 
                     
-                    # Calculate Fitzgerald number for this hour
-                    tempFn=0
-                    # Add humidity score up
-                    if 80 < hourly_report['humidity'] <= 85:
-                        tempFn=tempFn+4
-                    elif 85 < hourly_report['humidity'] <= 90:
-                        tempFn=tempFn+20
-                    elif 90 < hourly_report['humidity'] <= 100:
-                        tempFn=tempFn+101
-    
-                    # Add cloud score up
-                    if 20 < hourly_report['clouds'] <= 40:
-                        tempFn=tempFn+10
-                    elif 40 < hourly_report['clouds'] <= 60:
-                        tempFn=tempFn+40
-                    elif 60 < hourly_report['clouds'] <= 80:
-                        tempFn=tempFn+60
-                    elif 80 < hourly_report['clouds'] <= 100:
-                        tempFn=tempFn+101
-    
-                    # Add wind score up
-                    if 8 < hourly_report['wind_speed'] <=12:
-                        tempFn=tempFn+1
-                    elif 12 < hourly_report['wind_speed'] <= 15:
-                        tempFn=tempFn+4
-                    elif 15 < hourly_report['wind_speed'] <= 20:
-                        tempFn=tempFn+40
-                    elif 20 < hourly_report['wind_speed'] :
-                        tempFn=tempFn+101
-        
-                    if 'rain'  in hourly_report['weather'][0]['description'] or 'storm'  in hourly_report['weather'][0]['description'] or hourly_report['pop'] > 0: # Need to figure out pop thing here. 
-                        tempFn=tempFn+101
-    
+                    tempFn = fitzgerald_number(
+                        hourly_report['humidity'], hourly_report['clouds'],
+                        hourly_report['wind_speed'],
+                        hourly_report['weather'][0]['description'], hourly_report['pop'])
+
                     weatherline=[ hourly_report['humidity'], hourly_report['clouds'],hourly_report['wind_speed'],hourly_report['weather'][0]['main'], hourly_report['weather'][0]['description'], clock_hour, tempFn, iso_time,  hourly_report['temp'], hourly_report['pop']] # Last one meant to be rain but it has s
                     fitzgerald_weather_number_grid.append(weatherline)
     
@@ -2910,16 +2930,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     status_line['temperature'] = weatherline[8]
                     status_line['rain'] = weatherline[9]
     
-                    if float(weatherline[6]) < 11:
-                        status_line['weather_quality_number'] = 1
-                    elif float (weatherline[6]) < 21:
-                        status_line['weather_quality_number'] = 2
-                    elif float (weatherline[6]) < 41:
-                        status_line['weather_quality_number'] = 3
-                    elif float (weatherline[6]) < 101:
-                        status_line['weather_quality_number'] = 4
-                    else:
-                        status_line['weather_quality_number'] = 5
+                    status_line['weather_quality_number'] = weather_quality_number(weatherline[6])
     
                     forecast_status.append(status_line)
                     
@@ -2963,7 +2974,52 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                         response = requests.request("POST", url, data=payload, allow_redirects=False, headers=close_headers, stream=False)
                     except:
                         plog ("Connection glitch on the forecast request")
-                
+
+                # The daily forecast, for the days the hourly series cannot
+                # reach. One Call answers with eight days beside its forty-eight
+                # hours, so the week ahead costs no extra request -- it was in
+                # the response all along and simply went unread.
+                daily_status = []
+                for day in data.get('daily', []):
+                    try:
+                        weather = day['weather'][0]
+                        day_time = datetime.datetime.utcfromtimestamp(day['dt'])
+                        fitz = fitzgerald_number(
+                            day['humidity'], day['clouds'], day['wind_speed'],
+                            weather['description'], day.get('pop', 0))
+                        daily_status.append({
+                            'date': day_time.strftime('%Y-%m-%d'),
+                            'utc_long_form': day_time.isoformat() + 'Z',
+                            'humidity': day['humidity'],
+                            'cloud_cover': day['clouds'],
+                            'wind_speed': day['wind_speed'],
+                            'short_text': weather['main'],
+                            'long_text': weather['description'],
+                            'summary': day.get('summary'),
+                            'temperature_min': day['temp']['min'],
+                            'temperature_max': day['temp']['max'],
+                            'rain': day.get('pop', 0),
+                            'moon_phase': day.get('moon_phase'),
+                            'fitz_number': fitz,
+                            'weather_quality_number': weather_quality_number(fitz),
+                        })
+                    except (KeyError, IndexError, TypeError):
+                        # A malformed day costs that day, not the whole series.
+                        plog('Skipping a malformed day in the OWM daily forecast')
+
+                if daily_status:
+                    daily_url = f"{PTR_STATUS_ROOT}/{self.config['wema_name']}/status"
+                    daily_payload = json.dumps({
+                        "statusType": "forecast_daily",
+                        "status": {"forecast_daily": daily_status}
+                    })
+                    try:
+                        requests.request("POST", daily_url, data=daily_payload,
+                                         allow_redirects=False, headers=close_headers, stream=False)
+                        plog("Daily forecast sent: " + str(len(daily_status)) + " days.")
+                    except:
+                        plog("Connection glitch on the daily forecast request")
+
                 # Fitzgerald weather number calculation.
                 hourly_fitzgerald_number=[]
                 hourly_fitzgerald_number_by_hour=[]
