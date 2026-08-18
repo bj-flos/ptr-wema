@@ -98,6 +98,9 @@ wema_config = {
     'latitude': 35.554298,     # Decimal degrees, North is Positive  Meant to be Wx Station coordinates
     'longitude': -105.870197,   # Decimal degrees, West is negative
     'elevation': 2194,    # meters above sea level.  Meant to be elevation of main temp sensor 20' off ground.
+    # Clear Sky Chart key from cleardarksky.com, eg. 'SaBarbCA'. The UI builds
+    # the chart URLs from this; None means no chart is shown for the site.
+    'clear_sky_chart_id': 'LmyRdgObNM',
     'reference_ambient':  10.0,  # Degrees Celsius.  Alternately 12 entries, one for every - mid month.
     'reference_pressure':  775.0,    #mbar   A rough guess 20200315
 
