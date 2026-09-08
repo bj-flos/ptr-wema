@@ -19,6 +19,7 @@ import time
 import socket
 from pathlib import Path
 import math
+import calendar
 import requests
 import traceback
 import ephem
@@ -2896,20 +2897,73 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     hours_until_start_of_observing = 0
                 plog("Hours until end of observing: " + str(hours_until_end_of_observing))
                 
+                # The table covers the operational window and nothing else.
+                # OpenWeather returns 48 hours; publishing all of them buries
+                # the night the site is actually deciding about among two days
+                # of irrelevance.
+                #
+                # The start floors to the hour and the end ceils to it, so a
+                # window of 19:12 to 05:48 yields 19:00 through 06:00. The
+                # partial hours at each end are inside the window and their
+                # weather counts; truncating them would drop the hour the roof
+                # opens and the hour it closes.
+                def _hour_floor_unix(when):
+                    moment = ephem.Date(when).datetime().replace(
+                        minute=0, second=0, microsecond=0)
+                    return calendar.timegm(moment.timetuple())
+
+                def _hour_ceil_unix(when):
+                    moment = ephem.Date(when).datetime()
+                    floored = moment.replace(minute=0, second=0, microsecond=0)
+                    if moment > floored:
+                        floored = floored + datetime.timedelta(hours=1)
+                    return calendar.timegm(floored.timetuple())
+
+                window_start_unix = _hour_floor_unix(events['Operational Window Start'])
+                window_end_unix = _hour_ceil_unix(events['Operational Window Closes'])
+
+                hourly_in_window = [
+                    entry for entry in data['hourly']
+                    if window_start_unix <= entry['dt'] <= window_end_unix
+                ]
+                if not hourly_in_window:
+                    # A window further out than OpenWeather's 48 hours, which
+                    # happens when the site is closed for a long daytime. An
+                    # empty table would read as "no forecast" rather than "not
+                    # yet forecast", so the whole timeline goes out instead.
+                    plog("Forecast: no hourly entry falls inside the operational "
+                         "window (%s to %s UTC); publishing the full timeline."
+                         % (datetime.datetime.utcfromtimestamp(window_start_unix).isoformat(),
+                            datetime.datetime.utcfromtimestamp(window_end_unix).isoformat()))
+                    hourly_in_window = data['hourly']
+                else:
+                    plog("Forecast: %d hours covering the operational window, %s to %s UTC."
+                         % (len(hourly_in_window),
+                            datetime.datetime.utcfromtimestamp(window_start_unix).isoformat(),
+                            datetime.datetime.utcfromtimestamp(window_end_unix).isoformat()))
+
                 OWM_status_json={}
                 OWM_status_json["timestamp"] = round(time.time(), 1)
-                for hourly_report in data['hourly']:
+                for hourly_report in hourly_in_window:
                     
                     dt = datetime.datetime.utcfromtimestamp(hourly_report['dt'])  # or .fromtimestamp() for local time
                     iso_time = dt.isoformat()  # '2025-05-08T07:00:00'
-                    clock_hour = iso_time.split('T')[1].split(':')[0] 
+                    clock_hour = iso_time.split('T')[1].split(':')[0]
+
+                    # The same instant at the site. A forecast row is read by
+                    # someone deciding whether to observe tonight, and "is 03:00
+                    # UTC before or after my sunrise" is a subtraction nobody
+                    # should be doing in their head -- least of all at ECO,
+                    # where the local date is not even the same one.
+                    local_clock_hour = datetime.datetime.fromtimestamp(
+                        hourly_report['dt'], self.local_pytz_timezone).strftime('%H')
                     
                     tempFn = fitzgerald_number(
                         hourly_report['humidity'], hourly_report['clouds'],
                         hourly_report['wind_speed'],
                         hourly_report['weather'][0]['description'], hourly_report['pop'])
 
-                    weatherline=[ hourly_report['humidity'], hourly_report['clouds'],hourly_report['wind_speed'],hourly_report['weather'][0]['main'], hourly_report['weather'][0]['description'], clock_hour, tempFn, iso_time,  hourly_report['temp'], hourly_report['pop']] # Last one meant to be rain but it has s
+                    weatherline=[ hourly_report['humidity'], hourly_report['clouds'],hourly_report['wind_speed'],hourly_report['weather'][0]['main'], hourly_report['weather'][0]['description'], clock_hour, tempFn, iso_time,  hourly_report['temp'], hourly_report['pop'], local_clock_hour] # Last one meant to be rain but it has s
                     fitzgerald_weather_number_grid.append(weatherline)
     
                     hourcounter=hourcounter + 1
@@ -2925,6 +2979,8 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     status_line['short_text'] = weatherline[3]
                     status_line['long_text'] = weatherline[4]
                     status_line['utc_clock_hour'] = weatherline[5]
+                    # Beside the UTC hour, deliberately: same instant, site clock.
+                    status_line['local_clock_hour'] = weatherline[10]
                     status_line['fitz_number'] = weatherline[6]
                     status_line['utc_long_form'] = weatherline[7].replace(' ','T').split('+')[0]+'Z'
                     status_line['temperature'] = weatherline[8]
@@ -3025,24 +3081,36 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 hourly_fitzgerald_number_by_hour=[]
                 hourcounter = 0
                 self.hourly_report_rows=[]
+                # No hourcounter filter any more: the grid is already exactly the
+                # operational window, floored and ceiled to the hour where it is
+                # built. Counting index positions against math.ceil() of the
+                # hours remaining assumed the first entry sat on the current
+                # hour, which drifts through the night, and would now filter a
+                # second time on top of the window.
                 for entry in fitzgerald_weather_number_grid:
-                    if hourcounter >= hours_until_start_of_observing and hourcounter <= hours_until_end_of_observing:
-                        hourly_fitzgerald_number.append(entry[6])
-                        hourly_fitzgerald_number_by_hour.append([entry[5],entry[6]])
-                        # The hour as a record. Presentation is the consumer's.
-                        self.hourly_report_rows.append({
-                            'hour_utc': entry[5],
-                            'iso_time': entry[7],
-                            'fitzgerald_number': entry[6],
-                            'condition': entry[3],
-                            'description': entry[4],
-                            'cloud_pct': entry[1],
-                            'humidity_pct': entry[0],
-                            'wind_ms': entry[2],
-                            'temperature_c': entry[8],
-                            'rain_probability_pct': float(entry[9]) * 100,
-                            'roof_plan': None,
-                        })
+                    fitz = entry[6]
+                    hourly_fitzgerald_number.append(fitz)
+                    hourly_fitzgerald_number_by_hour.append([entry[5], fitz])
+                    # The hour as a record. Presentation is the consumer's.
+                    self.hourly_report_rows.append({
+                        'hour_utc': entry[5],
+                        # The same instant on the site's clock, beside the UTC
+                        # hour rather than left as a subtraction for the reader.
+                        'hour_local': entry[10],
+                        'iso_time': entry[7],
+                        'fitzgerald_number': fitz,
+                        'condition': entry[3],
+                        'description': entry[4],
+                        'cloud_pct': entry[1],
+                        'humidity_pct': entry[0],
+                        'wind_ms': entry[2],
+                        'temperature_c': entry[8],
+                        'rain_probability_pct': float(entry[9]) * 100,
+                        # Per hour, against the same threshold hours_bad_or_good
+                        # uses below, so the column and the decision cannot
+                        # disagree. Amended once open_at_start is known.
+                        'roof_plan': 'stay_closed' if fitz > 41 else 'open',
+                    })
                     hourcounter=hourcounter+1
                 
                 utc_string = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -3086,6 +3154,15 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     plog (hours_bad_or_good)
                     plog ("Probably that there isn't actually three elements in the list?")
                     plog (len(hours_bad_or_good))
+
+                # The opening rule is about the first three hours together, not
+                # each hour on its own, so a good first hour still means a shut
+                # roof when the two after it are bad. Say that in the column
+                # rather than in a sentence under the table: a reader looking at
+                # 19:00 should see what the roof will do at 19:00.
+                if not self.weather_report_open_at_start:
+                    for row in self.hourly_report_rows[:3]:
+                        row['roof_plan'] = 'stay_closed'
     
                 
     
@@ -3136,10 +3213,15 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                         hour = int(float(row['hour_utc']))
                     except (TypeError, ValueError):
                         continue
+                    # These are transitions, and the rest of the column is
+                    # state, so they say so: an hour that reads "Opens" is the
+                    # hour it happens, and the hours after it read "Open". Two
+                    # meanings in one column -- a transition on some rows and a
+                    # state on others -- is worse than either alone.
                     if hour in open_hours:
-                        row['roof_plan'] = 'open'
+                        row['roof_plan'] = 'opens'
                     elif hour in close_hours:
-                        row['roof_plan'] = 'close'
+                        row['roof_plan'] = 'closes'
 
                 self.owm_report_payload = {
                     'schema': 1,
