@@ -3106,10 +3106,11 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                         'wind_ms': entry[2],
                         'temperature_c': entry[8],
                         'rain_probability_pct': float(entry[9]) * 100,
-                        # Per hour, against the same threshold hours_bad_or_good
-                        # uses below, so the column and the decision cannot
-                        # disagree. Amended once open_at_start is known.
-                        'roof_plan': 'stay_closed' if fitz > 41 else 'open',
+                        # Filled in below, once the opening decision and the
+                        # transition hours are both known. A per-hour guess from
+                        # this hour's weather alone would say "open" for a clear
+                        # hour in the middle of a night the roof never opened.
+                        'roof_plan': None,
                     })
                     hourcounter=hourcounter+1
                 
@@ -3155,14 +3156,6 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     plog ("Probably that there isn't actually three elements in the list?")
                     plog (len(hours_bad_or_good))
 
-                # The opening rule is about the first three hours together, not
-                # each hour on its own, so a good first hour still means a shut
-                # roof when the two after it are bad. Say that in the column
-                # rather than in a sentence under the table: a reader looking at
-                # 19:00 should see what the roof will do at 19:00.
-                if not self.weather_report_open_at_start:
-                    for row in self.hourly_report_rows[:3]:
-                        row['roof_plan'] = 'stay_closed'
     
                 
     
@@ -3208,20 +3201,33 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                         close_hours.add(int(entry[0]))
                     except (TypeError, ValueError):
                         pass
+                # The column is the roof's state, walked forward from the
+                # opening decision. A transition is only reported where it
+                # actually happens: the roof cannot close if it was not open.
+                #
+                # The two rules above are not symmetric. Opening needs three
+                # good hours AND a bad one before them, so it is a genuine
+                # transition. Closing needs only a good hour followed by a bad
+                # one, with no reference to what the roof was doing, so a close
+                # lands on any good hour inside a bad stretch -- which read as
+                # "Stay closed, Closes, Stay closed" for a roof that never
+                # opened. Those markers feed nothing but this table, so the
+                # state walk decides what the column says.
+                roof_open = bool(self.weather_report_open_at_start)
                 for row in self.hourly_report_rows:
                     try:
                         hour = int(float(row['hour_utc']))
                     except (TypeError, ValueError):
+                        row['roof_plan'] = 'open' if roof_open else 'stay_closed'
                         continue
-                    # These are transitions, and the rest of the column is
-                    # state, so they say so: an hour that reads "Opens" is the
-                    # hour it happens, and the hours after it read "Open". Two
-                    # meanings in one column -- a transition on some rows and a
-                    # state on others -- is worse than either alone.
-                    if hour in open_hours:
+                    if (not roof_open) and hour in open_hours:
+                        roof_open = True
                         row['roof_plan'] = 'opens'
-                    elif hour in close_hours:
+                    elif roof_open and hour in close_hours:
+                        roof_open = False
                         row['roof_plan'] = 'closes'
+                    else:
+                        row['roof_plan'] = 'open' if roof_open else 'stay_closed'
 
                 self.owm_report_payload = {
                     'schema': 1,
