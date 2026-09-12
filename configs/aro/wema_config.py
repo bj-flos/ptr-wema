@@ -56,7 +56,6 @@ wema_config = {
     'owner':  ['google-oauth2|102124071738955888216',
                'google-oauth2|112401903840371673242'],  #    WER and  Neyle,
     'owner_alias': ['ANS', 'WER', 'TELOPS'],
-    'admin_aliases': ["ANS", "WER", 'KVH', "TELOPS", "TB", "DH", "KVH", 'KC' , 'MF'],
 
     #'observatory_location': site_name.lower(),  # Not sure what this has to do with a *site!*.
     'site_desc': "Apache Ridge Observatory, Santa Fe, NM, USA. 2194m",  #Chg name to site_location?

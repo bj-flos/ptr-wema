@@ -54,7 +54,6 @@ wema_config = {
     'owner':  ['google-oauth2|112401903840371673242'],  # Wayne
 
     'owner_alias': ['WER', 'TELOPS'],
-    'admin_aliases': ["ANS", "WER", "TELOPS", "TB", "DH", "KVH", "KC"],
 
     'client_hostname':  'MRC-0m35',  # This is also the long-name  Client is confusing!
     # NB NB disk D at mrc may be faster for temp storage

@@ -59,7 +59,6 @@ wema_config = {
     
     'owner':  ['google-oauth2|112401903840371673242'],  # Wayne  Can be a list
     'owner_alias': ['WER', 'TELOPS'],
-    'admin_aliases': ["ANS", "WER", 'KVH', "TELOPS", "TB", "DH", "KVH", 'KC' , 'MF'],
     
     'site_desc': "Mountain Ranch Camp Observatory, Santa Barbara, CA, USA. 318m",
     'airport_codes': ['SBA', 'SQA', 'OXN'],
