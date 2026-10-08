@@ -92,6 +92,39 @@ from datetime import timezone
 
 
 
+def _wx_says_bad(ocn_status):
+    """Is the CURRENT weather verdict an explicit no?
+
+    wx_ok reaches here as a bool from some paths and as 'Yes'/'No'/'Unknown'
+    from others, so it is compared as text. Anything that is not an explicit
+    no -- including Unknown, None, and a missing device -- is not bad weather.
+    """
+    if ocn_status is None:
+        return False
+    try:
+        wx_ok = ocn_status['observing_conditions']['observing_conditions1']['wx_ok']
+    except (KeyError, TypeError):
+        return False
+    return str(wx_ok).strip().lower() in ("no", "false")
+
+
+def _is_outside_open_window():
+    """Is now outside tonight's [Cool Down, Open .. Close and Park) window?
+
+    Defaults to False when the events are missing or unusable. This runs inside
+    send_enclosure_status, so raising here does not merely mislabel a roof -- it
+    stops the whole status update, which is how four sites went stale once
+    already. Not knowing must never be an exception.
+    """
+    try:
+        now = ephem.now()
+        open_at = g_dev['events']['Cool Down, Open']
+        close_at = g_dev['events']['Close and Park']
+        return not (open_at <= now < close_at)
+    except Exception:
+        return False
+
+
 def _shutter_reads_open(shutter_status):
     """Does this shutter reading mean the roof is open?
 
@@ -2142,23 +2175,33 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     enc_status['enclosure']['enclosure1']['shut_reason_manual_mode'] = True
                 else:
                     enc_status['enclosure']['enclosure1']['shut_reason_manual_mode'] = False
-                if ocn_status is not None:  #NB NB ocn status has never been established first time this is envoked after startup -WER
-                    if ocn_status['observing_conditions']['observing_conditions1']['wx_ok'] == 'Unknown':
-                        enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = False
-                    elif ocn_status['observing_conditions']['observing_conditions1']['wx_ok'] == 'No' or not self.weather_report_open_at_start:
-                        enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = True
-                elif not self.weather_report_open_at_start:
-                    enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = True
-                else:
-                    enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = False
+                # Bad weather means the weather is bad NOW.
+                #
+                # This used to also fire on `not self.weather_report_open_at_start`,
+                # which is a FORECAST made earlier about whether the night would
+                # open at all. Conflating the two had ECO reporting bad_weather
+                # with wx_ok True under a clear sky -- and because the status
+                # service ranks bad_weather above every other reason, the map
+                # painted a healthy site red. A forecast that declined to open is
+                # not a weather closure.
+                #
+                # Unknown stays False: not knowing is not the same as bad, and
+                # this flag outranks the others once it is set.
+                enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = _wx_says_bad(ocn_status)
 
                     # NEED TO INCLUDE WEATHER REPORT AND FITZ NUMBER HERE
 
-                if g_dev['events']['Cool Down, Open'] < ephem.now() or ephem.now() < g_dev['events'][
-                    'Close and Park'] > ephem.now():
-                    enc_status['enclosure']['enclosure1']['shut_reason_daytime'] = True
-                else:
-                    enc_status['enclosure']['enclosure1']['shut_reason_daytime'] = False
+                # Daytime means outside the open window, as a plain interval
+                # test. The old line read
+                #
+                #     if OPEN < now or now < CLOSE > now:
+                #
+                # where `now < CLOSE > now` is a chained comparison that reduces
+                # to `now < CLOSE`, leaving `OPEN < now or now < CLOSE` -- true
+                # for very nearly all of every day. It reported daytime with the
+                # sun 46 degrees BELOW the horizon. The form below matches the
+                # one already used further down this file.
+                enc_status['enclosure']['enclosure1']['shut_reason_daytime'] = _is_outside_open_window()
                     
             if 'MaxDome' in g_dev['enc'].config['enclosure']['enclosure1']['driver']:   
                 # Remove the dome_offset
