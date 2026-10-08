@@ -112,8 +112,15 @@ def _shutter_reads_open(shutter_status):
     if shutter_status is None:
         return False
     text = str(shutter_status).strip().lower()
-    text = re.sub(r"^sim\.?\s*", "", text)
-    return text == "open"
+    # Plain string work on purpose: wema.py does not import re, and an earlier
+    # version of this helper used re.sub and raised NameError on every call --
+    # which, because send_enclosure_status is where it is called from, took the
+    # whole status update down with it rather than just getting the roof wrong.
+    for prefix in ("sim.", "sim"):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            break
+    return text.strip() == "open"
 
 
 def fit_cloud_prediction_model(df, directory):
