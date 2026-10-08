@@ -162,6 +162,13 @@ def _shutter_reads_open(shutter_status):
 # spelling the names out.
 CLOUD_MODEL_FEATURES = ['sky_temp_C', 'sky-ambient', 'sky-ambient^2']
 
+# Below this many surviving rows a region cannot be fitted at all: np.polyfit
+# raises "expected non-empty vector for x" on an empty slice, and x.min() raises
+# on an empty array. This is only a floor for whether the arithmetic can run --
+# whether the resulting model is trusted is a separate, far larger threshold at
+# the point of use.
+MIN_CLOUD_MODEL_ROWS = 10
+
 
 def fit_cloud_prediction_model(df, directory):
     
@@ -179,6 +186,10 @@ def fit_cloud_prediction_model(df, directory):
     
     daytime_model=None
     nighttime_model=None
+    # Returned unconditionally, so they cannot be left unbound by a
+    # region that bails out before assigning them.
+    number_of_daytime_weather_observations=0
+    number_of_nighttime_weather_observations=0
 
     # Manually add polynomial terms for specific features
     df['sky-ambient^2'] = df['sky-ambient'] ** 2
@@ -235,8 +246,17 @@ def fit_cloud_prediction_model(df, directory):
         except:
             plog ("failed at splitting dataset by cloud levels... usually we don't have good coverage yet.")
 
-
-
+        # Everything below needs rows: three sigma-clip passes call np.polyfit
+        # and x.min(), all of which raise on an empty slice. That exception used
+        # to escape this function entirely, so one thin region discarded BOTH
+        # models and the observation counts with them -- and the caller reported
+        # it as "failed model?", which reads as though the fit was attempted and
+        # rejected rather than never run at all.
+        if len(region_df) < MIN_CLOUD_MODEL_ROWS:
+            plog("cloud model: %s has only %d rows after filtering (need %d) -- "
+                 "skipping %s this pass and keeping whatever model it already has."
+                 % (part_of_day, len(region_df), MIN_CLOUD_MODEL_ROWS, part_of_day))
+            continue
 
         # 1) grab x and y
         x = region_df['avg_forecast_cloudcover'].to_numpy()
@@ -249,6 +269,10 @@ def fit_cloud_prediction_model(df, directory):
         max_iters = 5       # maximum number of cycles
         
         for i in range(max_iters):
+            # A clip that rejects nearly everything leaves nothing to fit on the
+            # next pass; stop with the mask we have rather than raise.
+            if mask.sum() < 2:
+                break
             # 1) fit to the current inliers
             slope, intercept = np.polyfit(x[mask], y[mask], 1)
         
@@ -299,6 +323,10 @@ def fit_cloud_prediction_model(df, directory):
         max_iters = 5       # maximum number of cycles
         
         for i in range(max_iters):
+            # A clip that rejects nearly everything leaves nothing to fit on the
+            # next pass; stop with the mask we have rather than raise.
+            if mask.sum() < 2:
+                break
             # 1) fit to the current inliers
             slope, intercept = np.polyfit(x[mask], y[mask], 1)
         
@@ -345,6 +373,10 @@ def fit_cloud_prediction_model(df, directory):
         max_iters = 5       # maximum number of cycles
         
         for i in range(max_iters):
+            # A clip that rejects nearly everything leaves nothing to fit on the
+            # next pass; stop with the mask we have rather than raise.
+            if mask.sum() < 2:
+                break
             # 1) fit to the current inliers
             slope, intercept = np.polyfit(x[mask], y[mask], 1)
         
@@ -389,6 +421,8 @@ def fit_cloud_prediction_model(df, directory):
             """
             mask = np.ones_like(y, dtype=bool)
             for _ in range(max_iters):
+                if mask.sum() < 2:
+                    break
                 # fit only to current inliers
                 m, b = np.polyfit(x[mask], y[mask], 1)
                 resid = y - (m*x + b)
@@ -2353,7 +2387,28 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     })[CLOUD_MODEL_FEATURES]
                     
                     plog (new_data)
-                    try:                    
+
+                    # A model stays None until its first successful fit. Calling
+                    # .predict on None raises AttributeError on EVERY status
+                    # cycle and buries the real reason under a traceback headed
+                    # "failed model?", so say it once and plainly instead.
+                    if sun_altitude.deg >= 18:
+                        models_in_use = [('daytime', self.daytime_cloud_model)]
+                    elif sun_altitude.deg <= -18:
+                        models_in_use = [('nighttime', self.nighttime_cloud_model)]
+                    else:
+                        models_in_use = [('daytime', self.daytime_cloud_model),
+                                         ('nighttime', self.nighttime_cloud_model)]
+                    not_yet_fitted = [n for n, m in models_in_use if m is None]
+
+                    if not_yet_fitted:
+                        plog("cloud model: no %s model fitted yet -- local cloud cover "
+                             "falls back to the forecast until the next weather report."
+                             % " or ".join(not_yet_fitted))
+                        self.median_cloud_estimate = None
+                        self.predicted_clouds = None
+                    else:
+                      try:                    
                         
                         if sun_altitude.deg >= 18:
                             self.predicted_clouds = self.daytime_cloud_model.predict(new_data)
@@ -2378,7 +2433,7 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                         plog ("Past clouds: " + str(self.cloud_tracker))
                         plog ("Median of last ten observations: " + str(round(np.median(self.cloud_tracker),2)) + " std " + str(round(np.std(self.cloud_tracker),2)))
         
-                    except:
+                      except:
                         plog ("failed model? Perhaps can happen if we haven't built up enough points yet.")
                         self.median_cloud_estimate=100
                         plog(traceback.format_exc())
@@ -3934,8 +3989,15 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 df['dew_point_depression'] =  df['OWM_temperature'] - df['dewpoint']                
                 
                 try:                    
-                    # Run the updated model with polynomial features included
-                    self.daytime_cloud_model, self.nighttime_cloud_model, self.number_of_daytime_weather_observations, self.number_of_nighttime_weather_observations = fit_cloud_prediction_model(df, weather_directory)     
+                    # Run the updated model with polynomial features included.
+                    # A region that could not be refitted comes back as None --
+                    # keep the model it already had rather than throw a working
+                    # one away until the next weather report comes round.
+                    new_daytime, new_nighttime, self.number_of_daytime_weather_observations, self.number_of_nighttime_weather_observations = fit_cloud_prediction_model(df, weather_directory)
+                    if new_daytime is not None:
+                        self.daytime_cloud_model = new_daytime
+                    if new_nighttime is not None:
+                        self.nighttime_cloud_model = new_nighttime
                     
                 except:
                     plog ("failed model?")
