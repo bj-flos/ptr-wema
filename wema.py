@@ -3776,13 +3776,17 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                             focuser_temperature= focuser_status['focus_temperature']['val']
                             
                             current_fwhm_seeing=obs_status.json()['status']['current_fwhm_seeing']
-                            try:
-                                estimated_sky_transmissiveness= obs_status.json()['status']['estimated_sky_transmissiveness']
-                                #estimated_sky_transmissiveness_filter= obs_status.json()['status']['estimated_sky_transmissiveness_filter']
-                            except:
-                                plog(traceback.format_exc())
-                                estimated_sky_transmissiveness=None
-                                #estimated_sky_transmissiveness_filter=None
+                            # Nothing publishes estimated_sky_transmissiveness. The name
+                            # appears nowhere in ptr-observatory, so its absence is the
+                            # permanent, normal state and not a fault -- unlike its sibling
+                            # current_fwhm_seeing, which obs.py does send. Subscripting it
+                            # raised KeyError on every nightly report and logged a full
+                            # traceback for a value the except branch then set to None, which
+                            # is what .get returns anyway. Still read, so an observatory that
+                            # starts publishing it is picked up without another change here.
+                            obs_status_body = obs_status.json()['status']
+                            estimated_sky_transmissiveness = obs_status_body.get('estimated_sky_transmissiveness')
+                            #estimated_sky_transmissiveness_filter = obs_status_body.get('estimated_sky_transmissiveness_filter')
                         
                         else:
                             focuser_temperature=None
