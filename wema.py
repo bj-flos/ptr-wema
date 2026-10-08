@@ -92,6 +92,30 @@ from datetime import timezone
 
 
 
+def _shutter_reads_open(shutter_status):
+    """Does this shutter reading mean the roof is open?
+
+    Three spellings reach here for the same thing -- "Open" from real
+    hardware, and "Sim. Open" from a simulated enclosure, which the old list
+    missed because it spelled it "Sim Open" without the period. The simulated
+    sites publish the period, so a simulated roof that was open read as
+    neither open nor shut.
+
+    The "sim." prefix is stripped and the rest compared whole rather than
+    matched as a substring, so "Opening" stays distinct from "Open": a roof in
+    transit is not yet open. ptr_ui's helpers.enclosureIsOpen does the same, so
+    the dot on the map and the word in the footer cannot disagree.
+
+    None -- no reading at all -- is not open either, which is what the caller
+    wants: unknown must not be reported as an open roof.
+    """
+    if shutter_status is None:
+        return False
+    text = str(shutter_status).strip().lower()
+    text = re.sub(r"^sim\.?\s*", "", text)
+    return text == "open"
+
+
 def fit_cloud_prediction_model(df, directory):
     
     #directory = directory + '/weatherfits'
@@ -2091,12 +2115,20 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                 plog ("bad")
             
             # New Tim Entries
-            if enc_status['enclosure']['enclosure1']['shutter_status']  is not None:
-                if enc_status['enclosure']['enclosure1']['shutter_status'] in ['Open', 'Sim Open']:
-                    enc_status['enclosure']['enclosure1']['enclosure_is_open'] = True
-                    enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = False
-                    enc_status['enclosure']['enclosure1']['shut_reason_daytime'] = False
-                    enc_status['enclosure']['enclosure1']['shut_reason_manual_mode'] = False
+            # Was: `if shutter_status is not None:` with the open test nested
+            # inside and no else. A reading of 'Closed' is not None and not in
+            # the open list, so NEITHER branch ran: enclosure_is_open and all
+            # three shut_reason_* flags went unwritten, the status service
+            # published shut_reason: null, and ptr_ui -- which colours a shut
+            # roof red only for 'bad_weather' -- fell through to yellow for
+            # every closure, including an ordinary daytime one. The branch that
+            # sets the reasons was only ever reached when there was no shutter
+            # reading at all.
+            if _shutter_reads_open(enc_status['enclosure']['enclosure1']['shutter_status']):
+                enc_status['enclosure']['enclosure1']['enclosure_is_open'] = True
+                enc_status['enclosure']['enclosure1']['shut_reason_bad_weather'] = False
+                enc_status['enclosure']['enclosure1']['shut_reason_daytime'] = False
+                enc_status['enclosure']['enclosure1']['shut_reason_manual_mode'] = False
             else:
                 enc_status['enclosure']['enclosure1']['enclosure_is_open'] = False
                 if not enc_status['enclosure']['enclosure1']['enclosure_mode'] == 'Automatic':
