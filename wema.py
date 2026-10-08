@@ -156,6 +156,13 @@ def _shutter_reads_open(shutter_status):
     return text.strip() == "open"
 
 
+# The columns the cloud model is fitted on, in the order it is fitted on them.
+# scikit-learn matches a prediction frame against these by name AND by order,
+# so the fit and the prediction must read this one list rather than each
+# spelling the names out.
+CLOUD_MODEL_FEATURES = ['sky_temp_C', 'sky-ambient', 'sky-ambient^2']
+
+
 def fit_cloud_prediction_model(df, directory):
     
     #directory = directory + '/weatherfits'
@@ -175,7 +182,7 @@ def fit_cloud_prediction_model(df, directory):
 
     # Manually add polynomial terms for specific features
     df['sky-ambient^2'] = df['sky-ambient'] ** 2
-    features = ['sky_temp_C', 'sky-ambient',  'sky-ambient^2']#'phase_of_day', 'sky-ambient^2', 'sin_hour', 'cos_hour'] 'dew_point_depression',
+    features = list(CLOUD_MODEL_FEATURES)
 
     for part_of_day in ['daytime','nighttime']:        
         
@@ -2336,11 +2343,14 @@ n    SkyAlert is failing so we are picking up Weather from the ARO-0m30 Skyalert
                     sun_altitude, moon_altitude, moon_illumination, flux_ground, sun_azimuth = self.get_sun_and_moon_info()
                 
                                    
+                    # Reindexed onto CLOUD_MODEL_FEATURES so the names and
+                    # the order are the fitted ones; a missing column raises
+                    # here rather than reaching sklearn as a silent NaN.
                     new_data = pd.DataFrame({
-                        'corrected_sky_temp_C': ocn_status['sky_temp_C'],
+                        'sky_temp_C': [ocn_status['sky_temp_C']],
                         'sky-ambient': [model_skyambient],
                         'sky-ambient^2': [model_skyambient **2]
-                    })
+                    })[CLOUD_MODEL_FEATURES]
                     
                     plog (new_data)
                     try:                    
