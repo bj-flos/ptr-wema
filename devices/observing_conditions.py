@@ -715,8 +715,32 @@ class ObservingConditions:
             # "is it clear" -- so it gets its own field instead of being
             # folded silently into them. 'n.a.' when no monitor is configured.
             safety_monitor_ok = 'n.a.'
+            # A simulated site can be told to stop asking. The ASCOM
+            # SafetyMonitor simulator answers IsSafe=false out of the box and
+            # has no persisted setting for it -- the only control is a Blazor
+            # checkbox in its web UI -- so a site built on it is closed from
+            # the moment it starts, whatever the weather lane says. That is
+            # correct for real hardware and useless for a fixture.
+            #
+            # Set observing_conditions1.assume_safety_monitor_safe: true to
+            # report 'Yes' without consulting the device. The monitor is still
+            # constructed and still logged; only the verdict is overridden, and
+            # the override is announced every cycle so nobody reads a roof
+            # decision taken under it as evidence the safety lane works.
+            #
+            # NEVER set this on a site with a real roof.
+            try:
+                assume_safe = bool(self.config['observing_conditions']
+                                   ['observing_conditions1']
+                                   .get('assume_safety_monitor_safe', False))
+            except Exception:
+                assume_safe = False
+            if assume_safe:
+                plog('observing_conditions: assume_safety_monitor_safe is set '
+                     '-- reporting the safety monitor as Yes WITHOUT reading it')
+                safety_monitor_ok = 'Yes'
             monitor = getattr(self, 'sky_monitor_oktoopen', None)
-            if monitor is not None:
+            if monitor is not None and not assume_safe:
                 try:
                     connected = bool(monitor.Connected)
                 except Exception:
